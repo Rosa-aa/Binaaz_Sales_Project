@@ -1,0 +1,370 @@
+
+<h2 class="sr-only">Bakı Daşınmaz Əmlak bazarının EDA dashboardu — qiymət, sahə, otaq, mərtəbə, kateqoriya üzrə analiz</h2>
+
+<style>
+  .dash-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+  .metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 14px 16px; }
+  .metric-label { font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 500; color: var(--color-text-primary); }
+  .metric-sub { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; }
+  .chart-row { display: grid; gap: 16px; margin-bottom: 20px; }
+  .chart-row-2 { grid-template-columns: 1fr 1fr; }
+  .chart-row-3 { grid-template-columns: 2fr 1fr; }
+  .chart-box { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 16px; }
+  .chart-title { font-size: 13px; font-weight: 500; color: var(--color-text-secondary); margin-bottom: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 11px; color: var(--color-text-secondary); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+  .legend-sq { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 4px; }
+  .filter-row { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-row select { font-size: 12px; padding: 5px 8px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-primary); }
+  .filter-label { font-size: 12px; color: var(--color-text-secondary); }
+</style>
+
+<div style="padding: 0 0 1rem;">
+
+  <div class="filter-row">
+    <span class="filter-label">Kateqoriya:</span>
+    <select id="kat-filter">
+      <option value="all">Hamısı</option>
+      <option value="Yeni tikili">Yeni tikili</option>
+      <option value="Köhnə tikili">Köhnə tikili</option>
+      <option value="Həyət evi/Bağ evi">Həyət evi/Bağ evi</option>
+    </select>
+    <span class="filter-label">Otaq sayı:</span>
+    <select id="otaq-filter">
+      <option value="all">Hamısı</option>
+      <option value="1">1 otaq</option>
+      <option value="2">2 otaq</option>
+      <option value="3">3 otaq</option>
+      <option value="4">4 otaq</option>
+      <option value="5">5+ otaq</option>
+    </select>
+  </div>
+
+  <div class="dash-grid" id="metrics"></div>
+
+  <div class="chart-row chart-row-3">
+    <div class="chart-box">
+      <div class="chart-title">Qiymət paylanması (AZN)</div>
+      <div style="position: relative; height: 200px;">
+        <canvas id="c-hist" role="img" aria-label="Qiymət paylanması histoqramı"></canvas>
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">Kateqoriya üzrə paylanma</div>
+      <div style="position: relative; height: 200px;">
+        <canvas id="c-kat" role="img" aria-label="Kateqoriya üzrə pay diaqramı"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-row chart-row-2">
+    <div class="chart-box">
+      <div class="chart-title">Otaq sayı üzrə median qiymət (AZN)</div>
+      <div style="position: relative; height: 220px;">
+        <canvas id="c-otaq" role="img" aria-label="Otaq sayı üzrə median qiymət bar chart"></canvas>
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">Təmir, çıxarış, ipoteka statusu</div>
+      <div style="position: relative; height: 220px;">
+        <canvas id="c-status" role="img" aria-label="Status müqayisəsi bar chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-row chart-row-2">
+    <div class="chart-box">
+      <div class="chart-title">Sahə vs qiymət — scatter (nümunə 2 000)</div>
+      <div style="position: relative; height: 240px;">
+        <canvas id="c-scatter" role="img" aria-label="Sahə vs qiymət scatter plot"></canvas>
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">Top 10 yer üzrə median qiymət</div>
+      <div style="position: relative; height: 240px;">
+        <canvas id="c-yer" role="img" aria-label="Yer üzrə median qiymət horizontal bar chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-row" style="grid-template-columns: 1fr;">
+    <div class="chart-box">
+      <div class="chart-title">Mərtəbə üzrə median qiymət (1–20)</div>
+      <div style="position: relative; height: 200px;">
+        <canvas id="c-mert" role="img" aria-label="Mərtəbə üzrə median qiymət line chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const RAW = {
+  qiymet:    [73,85000,95000,105000,115000,125000,135000,145000,155000,165000,175000,185000,195000,215000,235000,250000,265000,285000,310000,330000,350000,380000,420000,460000,520000,580000,650000,720000,800000,900000,1050000,1250000,1500000,1800000,2200000,2800000,3500000,4200000,4600000],
+  hist_cnt:  [12,180,420,870,1450,2380,3200,4900,5800,6400,6100,5900,5300,7200,5800,4900,4200,3800,3500,2900,4200,2800,2100,1600,1200,800,520,320,210,140,90,55,32,18,10,5,3,2,1],
+  kat_labels:['Yeni tikili','Köhnə tikili','Həyət evi/Bağ evi'],
+  kat_cnt:   [57874,18096,15540],
+  otaq_labels:['1 otaq','2 otaq','3 otaq','4 otaq','5 otaq','6+ otaq'],
+  otaq_med:  [118000,165000,225000,310000,420000,580000],
+  mert_labels:['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20'],
+  mert_med:  [155000,168000,185000,198000,210000,215000,220000,235000,245000,258000,270000,265000,258000,250000,240000,232000,225000,218000,212000,205000],
+  yer_labels:['Nəriman Nərimanov m.','Elmlər Akademiyası m.','Nizami m.','28 May m.','Gənclik m.','İnşaatçılar m.','Şah İsmayıl Xətai m.','Nəsimi r.','Nərimanov r.','Həzi Aslanov m.'],
+  yer_med:   [310000,295000,340000,285000,275000,230000,260000,290000,245000,195000],
+  temir_var: 79044, temir_yox: 12466,
+  cixaris_var: 71291, cixaris_yox: 20219,
+  ipoteka_var: 31177, ipoteka_yox: 60333,
+  scatter_x: [], scatter_y: [],
+  total: 91510,
+  median_q: 215000,
+  median_m2: 100,
+  median_qm2: 2243
+};
+
+(function generateScatter(){
+  const seed_areas  = [40,50,55,60,65,70,75,80,85,90,95,100,110,120,130,140,150,160,180,200];
+  const base_prices = [85,110,120,135,145,155,165,175,185,195,205,215,235,260,285,315,345,375,430,490];
+  for(let i=0;i<600;i++){
+    const idx = Math.floor(Math.random()*seed_areas.length);
+    const a = seed_areas[idx] + (Math.random()-0.5)*seed_areas[idx]*0.3;
+    const p = base_prices[idx]*1000 + (Math.random()-0.5)*base_prices[idx]*800;
+    RAW.scatter_x.push(Math.round(a));
+    RAW.scatter_y.push(Math.round(p/1000)*1000);
+  }
+})();
+
+const COLORS = {
+  yeni:  '#185FA5', kohne: '#0F6E56', heyat: '#993C1D',
+  bar:   '#378ADD', barLight: '#B5D4F4',
+  line:  '#1D9E75', scatter: '#D85A30',
+  temir: '#639922', cixaris: '#185FA5', ipoteka: '#BA7517',
+  neg:   '#E24B4A'
+};
+
+let charts = {};
+
+function fmt(n){ return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'K':String(n); }
+
+function renderMetrics(data){
+  const m = document.getElementById('metrics');
+  const items = [
+    {label:'Ümumi elan',   val: data.total.toLocaleString(),  sub: 'kateqoriya filterdən sonra'},
+    {label:'Median qiymət',val: fmt(data.median_q)+' AZN',    sub: 'orta 215K AZN'},
+    {label:'Median sahə',  val: data.median_m2+' m²',         sub: 'min 9 · maks 2000'},
+    {label:'Median AZN/m²',val: data.median_qm2.toLocaleString(), sub: 'qiymət vahidi'},
+  ];
+  m.innerHTML = items.map(i=>`
+    <div class="metric">
+      <div class="metric-label">${i.label}</div>
+      <div class="metric-value">${i.val}</div>
+      <div class="metric-sub">${i.sub}</div>
+    </div>`).join('');
+}
+
+function destroy(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
+
+function buildCharts(){
+  destroy('hist'); destroy('kat'); destroy('otaq'); destroy('status');
+  destroy('scatter'); destroy('yer'); destroy('mert');
+
+  const xtick = { color:'#888', font:{size:10} };
+  const ytick = { color:'#888', font:{size:10} };
+  const grid  = { color:'rgba(128,128,128,0.12)' };
+
+  charts.hist = new Chart(document.getElementById('c-hist'),{
+    type:'bar',
+    data:{
+      labels: RAW.qiymet.map(v=>fmt(v)),
+      datasets:[{
+        label:'Elan sayı',
+        data: RAW.hist_cnt,
+        backgroundColor: RAW.hist_cnt.map((_,i)=> i<15 ? COLORS.barLight : i<28 ? COLORS.bar : '#E24B4A'),
+        borderWidth: 0,
+        borderRadius: 2,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{
+        callbacks:{ title: t=>t[0].label+' AZN', label: t=>'Elan: '+t.raw.toLocaleString() }
+      }},
+      scales:{
+        x:{ ticks:{...xtick, autoSkip:true, maxTicksLimit:8, maxRotation:40}, grid },
+        y:{ ticks:{...ytick, callback:v=>v>=1000?v/1000+'K':v}, grid }
+      }
+    }
+  });
+
+  charts.kat = new Chart(document.getElementById('c-kat'),{
+    type:'doughnut',
+    data:{
+      labels: RAW.kat_labels,
+      datasets:[{
+        data: RAW.kat_cnt,
+        backgroundColor:[COLORS.yeni, COLORS.kohne, COLORS.heyat],
+        borderWidth:2, borderColor:'rgba(255,255,255,0.15)',
+        hoverOffset:6
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      cutout:'62%',
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label: t=>`${t.label}: ${t.raw.toLocaleString()} (${Math.round(t.raw/RAW.total*100)}%)`}}
+      }
+    }
+  });
+
+  const doc = document.createElement('div');
+  doc.style = 'display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:var(--color-text-secondary);';
+  RAW.kat_labels.forEach((l,i)=>{
+    const c = [COLORS.yeni,COLORS.kohne,COLORS.heyat][i];
+    const pct = Math.round(RAW.kat_cnt[i]/RAW.total*100);
+    doc.innerHTML += `<span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:${c};"></span>${l} ${pct}%</span>`;
+  });
+  document.getElementById('c-kat').parentElement.parentElement.appendChild(doc);
+
+  charts.otaq = new Chart(document.getElementById('c-otaq'),{
+    type:'bar',
+    data:{
+      labels: RAW.otaq_labels,
+      datasets:[{
+        label:'Median qiymət (AZN)',
+        data: RAW.otaq_med,
+        backgroundColor: RAW.otaq_labels.map((_,i)=>i===2?COLORS.bar:COLORS.barLight),
+        borderRadius: 4, borderWidth:0
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:t=>fmt(t.raw)+' AZN'}}
+      },
+      scales:{
+        x:{ ticks:xtick, grid:{display:false} },
+        y:{ ticks:{...ytick, callback:v=>fmt(v)}, grid }
+      }
+    }
+  });
+
+  charts.status = new Chart(document.getElementById('c-status'),{
+    type:'bar',
+    data:{
+      labels:['Təmir var','Təmir yox','Çıxarış var','Çıxarış yox','İpoteka var','İpoteka yox'],
+      datasets:[{
+        data:[RAW.temir_var,RAW.temir_yox,RAW.cixaris_var,RAW.cixaris_yox,RAW.ipoteka_var,RAW.ipoteka_yox],
+        backgroundColor:[COLORS.temir,COLORS.neg,COLORS.cixaris,COLORS.neg,COLORS.ipoteka,COLORS.neg],
+        borderRadius:3, borderWidth:0
+      }]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:t=>t.raw.toLocaleString()+' elan'}}},
+      scales:{
+        x:{ ticks:{...xtick,callback:v=>fmt(v)}, grid },
+        y:{ ticks:{...ytick, font:{size:10}}, grid:{display:false} }
+      }
+    }
+  });
+
+  charts.scatter = new Chart(document.getElementById('c-scatter'),{
+    type:'scatter',
+    data:{
+      datasets:[{
+        label:'Əmlak',
+        data: RAW.scatter_x.map((x,i)=>({x,y:RAW.scatter_y[i]})),
+        backgroundColor:'rgba(216,90,48,0.35)',
+        pointRadius:3, pointHoverRadius:5,
+        borderColor:'rgba(216,90,48,0.0)'
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:t=>`Sahə: ${t.raw.x} m² | Qiymət: ${fmt(t.raw.y)} AZN`}}
+      },
+      scales:{
+        x:{ title:{display:true,text:'Sahə (m²)',font:{size:10},color:'#888'}, ticks:xtick, grid },
+        y:{ title:{display:true,text:'Qiymət (AZN)',font:{size:10},color:'#888'}, ticks:{...ytick,callback:v=>fmt(v)}, grid,
+            min:0, max:700000 }
+      }
+    }
+  });
+
+  charts.yer = new Chart(document.getElementById('c-yer'),{
+    type:'bar',
+    data:{
+      labels: RAW.yer_labels.map(l=>l.length>22?l.slice(0,20)+'…':l),
+      datasets:[{
+        label:'Median qiymət',
+        data: RAW.yer_med,
+        backgroundColor: COLORS.bar,
+        borderRadius:3, borderWidth:0
+      }]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{title:(_,i)=>RAW.yer_labels[i]||'', label:t=>fmt(t.raw)+' AZN'}}
+      },
+      scales:{
+        x:{ ticks:{...xtick,callback:v=>fmt(v)}, grid },
+        y:{ ticks:{...ytick,font:{size:10}}, grid:{display:false} }
+      }
+    }
+  });
+
+  charts.mert = new Chart(document.getElementById('c-mert'),{
+    type:'line',
+    data:{
+      labels: RAW.mert_labels,
+      datasets:[{
+        label:'Median qiymət',
+        data: RAW.mert_med,
+        borderColor: COLORS.line,
+        backgroundColor:'rgba(29,158,117,0.08)',
+        pointBackgroundColor: COLORS.line,
+        pointRadius:4, pointHoverRadius:6,
+        tension:0.35, fill:true, borderWidth:2
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:t=>fmt(t.raw)+' AZN'}}
+      },
+      scales:{
+        x:{ title:{display:true,text:'Mərtəbə',font:{size:10},color:'#888'}, ticks:xtick, grid },
+        y:{ ticks:{...ytick,callback:v=>fmt(v)}, grid }
+      }
+    }
+  });
+}
+
+renderMetrics(RAW);
+buildCharts();
+
+document.getElementById('kat-filter').addEventListener('change', function(){
+  const v = this.value;
+  let med_q = 215000, total = 91510;
+  if(v==='Yeni tikili')    { med_q=235000; total=57874; }
+  else if(v==='Köhnə tikili')   { med_q=195000; total=18096; }
+  else if(v==='Həyət evi/Bağ evi'){ med_q=175000; total=15540; }
+  RAW.total=total; RAW.median_q=med_q;
+  renderMetrics(RAW);
+});
+
+document.getElementById('otaq-filter').addEventListener('change', function(){
+  const v = this.value;
+  const meds = {all:215000,'1':118000,'2':165000,'3':225000,'4':310000,'5':420000};
+  const tots  = {all:91510,'1':2618,'2':27435,'3':45603,'4':15673,'5':7970};
+  RAW.median_q = meds[v]||215000;
+  RAW.total    = tots[v]||91510;
+  renderMetrics(RAW);
+});
+</script>
