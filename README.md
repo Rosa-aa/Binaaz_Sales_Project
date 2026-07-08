@@ -272,21 +272,63 @@ Binaaz_Sales_Project/
 ├── README.md
 ├── .gitignore
 ├── Binaaz_Sale_Project.ipynb      ← Full analysis and modeling notebook
-└── house_sale_eda_dashboard.html  ← Interactive EDA dashboard
+├── house_sale_eda_dashboard.html  ← Interactive EDA dashboard
+└── binaaz_pipeline/                ← Modular, reusable Python version of the notebook
+    ├── requirements.txt
+    ├── config.py
+    ├── data_cleaning.py
+    ├── feature_engineering.py
+    ├── train.py
+    ├── evaluate.py
+    └── run_pipeline.py
 ```
 
 **Note:** `house_sale.csv` (the raw dataset) is not included in the repository due to file size.
 
 ---
 
+## 14.1 `binaaz_pipeline/` — Modular Pipeline
+
+The notebook's logic has also been refactored into standalone, importable Python modules — the same analysis and modeling steps, organized for reuse rather than one-off exploration. Each module maps directly to a section of the notebook:
+
+| File | Responsibility |
+|---|---|
+| `config.py` | Single source of truth for file paths, column lists (duplicate/leakage/rename columns), encoding groups, and the final tuned XGBoost hyperparameters. |
+| `data_cleaning.py` | `load_data()`, `drop_duplicate_columns()`, `parse_structured_fields()` (splits `"145 m²"` → `145.0`, `"7/9"` → floor/total_floors), `clean_unit_price()`, `rename_columns()`, `handle_missing_values()` — chained together in `clean_pipeline()`. |
+| `feature_engineering.py` | `remove_outliers()` (IQR-based, on price/area/views/price-per-m²), `add_engineered_features()` (`qiymət_per_m2`, `mərtəbə_nisbəti`, `zemin_mərtəbə`, `son_mərtəbə`), `encode_features()` (label/target/one-hot) — chained together in `feature_engineering_pipeline()`. |
+| `train.py` | `drop_leakage_columns()`, `build_preprocessor()` (median/mode imputation + scaling/one-hot via `ColumnTransformer`), `get_candidate_models()` (the same 5 models compared in the notebook), `train_best_model()` (the tuned XGBoost). |
+| `evaluate.py` | `compare_models()`, `evaluate_final_model()`, `cross_validate_model()` (5-fold), `get_feature_importance()`, `check_overfitting()` (train vs. test R² gap). |
+| `run_pipeline.py` | Orchestrates all of the above end-to-end — running `python run_pipeline.py` reproduces the entire notebook pipeline from the raw CSV to a fully evaluated, tuned model. |
+
+### Running the pipeline
+
+```bash
+cd binaaz_pipeline
+pip install -r requirements.txt
+# Place house_sale.csv in this same folder, then:
+python run_pipeline.py
+```
+
+**Why keep both the notebook and the modular pipeline?** The notebook is the right tool for *exploration* — it shows the reasoning, intermediate plots, and dead ends (e.g. the similarity-based duplicate-column detection, the various EDA charts). The `binaaz_pipeline/` modules are the right tool for *reuse* — importing `train_best_model()` in a different script, or re-running the whole pipeline on updated data, without touching notebook cells one by one.
+
+---
+
 ## 15. Setup & Installation
 
+### Option A — Run the notebook (exploration)
 ```bash
 pip install pandas numpy scikit-learn xgboost matplotlib seaborn plotly folium
 jupyter notebook Binaaz_Sale_Project.ipynb
 ```
-
 The `house_sale.csv` file must be placed in the same directory as the notebook before running it.
+
+### Option B — Run the modular pipeline (reproducible script)
+```bash
+cd binaaz_pipeline
+pip install -r requirements.txt
+python run_pipeline.py
+```
+See [Section 14.1](#141-binaaz_pipeline--modular-pipeline) for what each module does.
 
 ---
 
